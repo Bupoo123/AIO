@@ -132,6 +132,10 @@ class App {
     setupToolEventListeners() {
         // 添加工具
         document.getElementById('addToolBtn').addEventListener('click', () => {
+            if (!userManager.isAdmin()) {
+                alert('权限不足，需要管理员权限');
+                return;
+            }
             toolManager.resetEditForm();
             document.getElementById('toolForm').style.display = 'block';
         });
@@ -166,6 +170,10 @@ class App {
     setupUserEventListeners() {
         // 用户管理面板
         document.getElementById('openUsersBtn').addEventListener('click', () => {
+            if (!userManager.isAdmin()) {
+                alert('权限不足，需要管理员权限');
+                return;
+            }
             const panel = document.getElementById('usersPanel');
             panel.classList.toggle('hidden');
             if (!panel.classList.contains('hidden')) {
@@ -175,11 +183,19 @@ class App {
 
         // 刷新用户列表
         document.getElementById('refreshUsersBtn').addEventListener('click', () => {
+            if (!userManager.isAdmin()) {
+                alert('权限不足，需要管理员权限');
+                return;
+            }
             userManager.renderUsers();
         });
 
         // 新增用户
         document.getElementById('addUserBtn').addEventListener('click', () => {
+            if (!userManager.isAdmin()) {
+                alert('权限不足，需要管理员权限');
+                return;
+            }
             document.getElementById('userEditTitle').innerText = '新增用户';
             document.getElementById('userEditForm').reset();
             document.getElementById('userEditOverlay').style.display = 'flex';

@@ -158,11 +158,11 @@ class UserManager {
                 <td>${pwdState}</td>
                 <td>
                     <div class="row" style="gap:0.4rem; flex-wrap:wrap;">
-                        <button class="btn-ghost" onclick="userManager.toggleRole(${u.id})">${u.role==='admin'?'设为用户':'设为管理员'}</button>
-                        <button class="btn-ghost" onclick="userManager.forceMustReset(${u.id})">强制改密</button>
-                        <button class="btn-ghost" onclick="userManager.resetUserPassword(${u.id})">重置密码</button>
+                        <button class="btn-ghost" onclick="userManager.uiToggleRole(${u.id})">${u.role==='admin'?'设为用户':'设为管理员'}</button>
+                        <button class="btn-ghost" onclick="userManager.uiForceMustReset(${u.id})">强制改密</button>
+                        <button class="btn-ghost" onclick="userManager.uiResetUserPassword(${u.id})">重置密码</button>
                         ${u.tempPassword ? `<button class="btn-ghost" onclick="userManager.copyTempPassword('${u.tempPassword}')">复制临时密码</button>` : ''}
-                        <button class="btn-danger" onclick="userManager.deleteUser(${u.id})">删除</button>
+                        <button class="btn-danger" onclick="userManager.uiDeleteUser(${u.id})">删除</button>
                     </div>
                 </td>
             `;
@@ -180,7 +180,11 @@ class UserManager {
     }
 
     // 暴露给全局的UI操作函数
-    toggleRole(userId) {
+    uiToggleRole(userId) {
+        if (!this.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         try {
             this.toggleRole(userId);
             this.renderUsers();
@@ -189,7 +193,11 @@ class UserManager {
         }
     }
 
-    forceMustReset(userId) {
+    uiForceMustReset(userId) {
+        if (!this.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         try {
             this.forceMustReset(userId);
             this.renderUsers();
@@ -198,7 +206,11 @@ class UserManager {
         }
     }
 
-    async resetUserPassword(userId) {
+    async uiResetUserPassword(userId) {
+        if (!this.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         try {
             const newTemp = await this.resetUserPassword(userId);
             this.renderUsers();
@@ -208,7 +220,11 @@ class UserManager {
         }
     }
 
-    deleteUser(userId) {
+    uiDeleteUser(userId) {
+        if (!this.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         try {
             const user = this.getUserById(userId);
             if (confirm(`确定删除用户：${user?.username || ''}？`)) {

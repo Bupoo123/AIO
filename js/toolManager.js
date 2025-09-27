@@ -82,6 +82,10 @@ class ToolManager {
 
     /* ---------- 工具编辑 ---------- */
     editTool(id) {
+        if (!userManager.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         const tool = this.tools.find(t => t.id === id);
         if (!tool) return;
         
@@ -96,6 +100,10 @@ class ToolManager {
     }
 
     confirmDeleteTool(id) {
+        if (!userManager.isAdmin()) {
+            alert('权限不足，需要管理员权限');
+            return;
+        }
         const t = this.tools.find(x => x.id === id);
         if (confirm(`确定删除工具：${t?.title || ''}？`)) {
             if (t) {
