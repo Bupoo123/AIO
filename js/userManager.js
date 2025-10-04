@@ -1,36 +1,39 @@
 /** ========================
- *  用户管理模块
+ *  用户管理模块（连接后端API）
  *  ======================== */
 class UserManager {
     constructor() {
-        this.users = this.loadUsers();
-        this.ensureDefaultAdmin();
+        this.users = [];
+        this.apiService = window.apiService;
+        this.initializeAuth();
     }
 
-    /* ---------- 用户数据管理 ---------- */
+    // 初始化认证状态
+    async initializeAuth() {
+        if (this.apiService.isAuthenticated()) {
+            try {
+                const response = await this.apiService.getCurrentUser();
+                if (response.success) {
+                    this.currentUser = response.data.user;
+                }
+            } catch (error) {
+                console.error('初始化认证失败:', error);
+                this.apiService.logout();
+            }
+        }
+    }
+
+    // 兼容旧版本的方法
     loadUsers() {
-        const saved = localStorage.getItem('users');
-        return saved ? JSON.parse(saved) : [];
+        return this.users;
     }
 
-    saveUsers() { 
-        localStorage.setItem('users', JSON.stringify(this.users)); 
+    saveUsers() {
+        // 后端存储，无需本地保存
     }
 
     async ensureDefaultAdmin() {
-        if (!this.users.some(u => u.role === 'admin')) {
-            const pwd = 'admin123';
-            const hash = await sha256(pwd);
-            this.users.push({
-                id: genId(),
-                username: 'admin',
-                role: 'admin',
-                passwordHash: hash,
-                mustReset: false,
-                tempPassword: null
-            });
-            this.saveUsers();
-        }
+        // 后端会自动创建默认管理员
     }
 
     getUserByName(name) { 
@@ -43,25 +46,23 @@ class UserManager {
 
     /* ---------- 认证相关 ---------- */
     async authenticate(username, password) {
-        const user = this.getUserByName(username);
-        if (!user) return { ok: false, reason: 'notfound' };
-        
-        const hash = await sha256(password);
-        if (user.passwordHash === hash || (user.tempPassword && await sha256(user.tempPassword) === hash)) {
-            // 如果是用临时密码登录，则强制 mustReset
-            if (user.tempPassword && await sha256(user.tempPassword) === hash) {
-                user.mustReset = true;
-                this.saveUsers();
+        try {
+            const response = await this.apiService.login({ username, password });
+            if (response.success) {
+                this.currentUser = response.data.user;
+                sessionManager.startSession(this.currentUser);
+                return { ok: true, mustReset: response.data.mustReset };
             }
-            
-            const currentUser = { id: user.id, username: user.username, role: user.role };
-            sessionManager.startSession(currentUser);
-            return { ok: true, mustReset: user.mustReset };
+            return { ok: false, reason: 'invalid' };
+        } catch (error) {
+            console.error('认证失败:', error);
+            return { ok: false, reason: 'error' };
         }
-        return { ok: false, reason: 'badpass' };
     }
 
     logout() {
+        this.currentUser = null;
+        this.apiService.logout();
         sessionManager.endSession();
     }
 
@@ -77,165 +78,160 @@ class UserManager {
 
     /* ---------- 密码管理 ---------- */
     async setPassword(userId, newPassword) {
-        const u = this.getUserById(userId);
-        if (!u) return false;
-        u.passwordHash = await sha256(newPassword);
-        u.tempPassword = null;
-        u.mustReset = false;
-        this.saveUsers();
-        return true;
+        try {
+            const response = await this.apiService.changePassword({
+                currentPassword: '', // 管理员重置密码不需要当前密码
+                newPassword
+            });
+            return response.success;
+        } catch (error) {
+            console.error('设置密码失败:', error);
+            return false;
+        }
     }
 
     async createUser({username, role = 'user', tempPassword}) {
-        username = username.trim();
-        if (!username) throw new Error('用户名不能为空');
-        if (this.getUserByName(username)) throw new Error('该用户名已存在');
-
-        const finalTemp = tempPassword && tempPassword.trim() ? tempPassword.trim() : genTempPassword();
-        const tempHash = await sha256(finalTemp);
-
-        const u = {
-            id: genId(),
-            username,
-            role,
-            passwordHash: tempHash,
-            mustReset: true,
-            tempPassword: finalTemp
-        };
-        this.users.push(u);
-        this.saveUsers();
-        return clone(u);
-    }
-
-    deleteUser(userId) {
-        const currentUser = this.getCurrentUser();
-        if (currentUser && currentUser.id === userId) {
-            throw new Error('不能删除当前登录的自己');
+        try {
+            const response = await this.apiService.createUser({
+                username,
+                role,
+                tempPassword
+            });
+            
+            if (response.success) {
+                return {
+                    id: response.data.user._id,
+                    username: response.data.user.username,
+                    role: response.data.user.role,
+                    tempPassword: response.data.tempPassword
+                };
+            }
+            throw new Error(response.message || '创建用户失败');
+        } catch (error) {
+            console.error('创建用户失败:', error);
+            throw error;
         }
-        this.users = this.users.filter(u => u.id !== userId);
-        this.saveUsers();
     }
 
-    async resetUserPassword(userId, newTempPwd = genTempPassword()) {
-        const u = this.getUserById(userId);
-        if (!u) throw new Error('用户不存在');
-        u.passwordHash = await sha256(newTempPwd);
-        u.mustReset = true;
-        u.tempPassword = newTempPwd;
-        this.saveUsers();
-        return newTempPwd;
+    async renderUsers() {
+        try {
+            const response = await this.apiService.getUsers();
+            if (response.success) {
+                this.users = response.data.users;
+                this.renderUsersTable();
+            }
+        } catch (error) {
+            console.error('获取用户列表失败:', error);
+        }
     }
 
-    toggleRole(userId) {
-        const u = this.getUserById(userId);
-        if (!u) throw new Error('用户不存在');
-        u.role = (u.role === 'admin') ? 'user' : 'admin';
-        this.saveUsers();
-    }
-
-    forceMustReset(userId) {
-        const u = this.getUserById(userId);
-        if (!u) throw new Error('用户不存在');
-        u.mustReset = true;
-        this.saveUsers();
-    }
-
-    /* ---------- 用户界面渲染 ---------- */
-    renderUsers() {
+    renderUsersTable() {
         const tbody = document.getElementById('usersTableBody');
         if (!tbody) return;
-        
-        tbody.innerHTML = '';
-        this.users.forEach(u => {
-            const tr = document.createElement('tr');
-            const pwdState = u.tempPassword ? 
-                `<span class="tag orange">临时密码有效</span>` : 
-                (u.mustReset ? `<span class="tag orange">待改密</span>` : `<span class="tag green">已设置</span>`);
-            
-            tr.innerHTML = `
+
+        tbody.innerHTML = this.users.map(u => `
+            <tr>
                 <td>${u.username}</td>
-                <td><span class="tag">${u.role === 'admin' ? '管理员' : '普通用户'}</span></td>
-                <td>${pwdState}</td>
+                <td>${u.role === 'admin' ? '管理员' : '普通用户'}</td>
+                <td>${u.mustReset ? '需要重置' : '正常'}</td>
                 <td>
-                    <div class="row" style="gap:0.4rem; flex-wrap:wrap;">
-                        <button class="btn-ghost" onclick="userManager.uiToggleRole(${u.id})">${u.role==='admin'?'设为用户':'设为管理员'}</button>
-                        <button class="btn-ghost" onclick="userManager.uiForceMustReset(${u.id})">强制改密</button>
-                        <button class="btn-ghost" onclick="userManager.uiResetUserPassword(${u.id})">重置密码</button>
-                        ${u.tempPassword ? `<button class="btn-ghost" onclick="userManager.copyTempPassword('${u.tempPassword}')">复制临时密码</button>` : ''}
-                        <button class="btn-danger" onclick="userManager.uiDeleteUser(${u.id})">删除</button>
-                    </div>
+                    <button onclick="userManager.editUser('${u._id}')" class="btn-small">编辑</button>
+                    <button onclick="userManager.resetPassword('${u._id}')" class="btn-small">重置密码</button>
+                    ${u._id !== this.getCurrentUser()?.id ? `<button onclick="userManager.deleteUser('${u._id}')" class="btn-small danger">删除</button>` : ''}
                 </td>
-            `;
-            tbody.appendChild(tr);
-        });
+            </tr>
+        `).join('');
     }
 
-    async copyTempPassword(password) {
-        try {
-            await navigator.clipboard.writeText(password);
-            alert('已复制临时密码');
-        } catch {
-            alert('复制失败，请手动选择复制');
-        }
+    async editUser(userId) {
+        const user = this.users.find(u => u._id === userId);
+        if (!user) return;
+
+        document.getElementById('editUsername').value = user.username;
+        document.getElementById('editRole').value = user.role;
+        document.getElementById('editTempPwd').value = '';
+        document.getElementById('userEditTitle').textContent = '编辑用户';
+        document.getElementById('userEditOverlay').style.display = 'flex';
+        
+        // 存储当前编辑的用户ID
+        document.getElementById('userEditForm').dataset.userId = userId;
     }
 
-    // 暴露给全局的UI操作函数
-    uiToggleRole(userId) {
-        if (!this.isAdmin()) {
-            alert('权限不足，需要管理员权限');
-            return;
-        }
+    async resetPassword(userId) {
         try {
-            this.toggleRole(userId);
-            this.renderUsers();
-        } catch (e) { 
-            alert(e.message); 
-        }
-    }
-
-    uiForceMustReset(userId) {
-        if (!this.isAdmin()) {
-            alert('权限不足，需要管理员权限');
-            return;
-        }
-        try {
-            this.forceMustReset(userId);
-            this.renderUsers();
-        } catch (e) { 
-            alert(e.message); 
-        }
-    }
-
-    async uiResetUserPassword(userId) {
-        if (!this.isAdmin()) {
-            alert('权限不足，需要管理员权限');
-            return;
-        }
-        try {
-            const newTemp = await this.resetUserPassword(userId);
-            this.renderUsers();
-            alert(`新的临时密码：${newTemp}\n请通知用户使用临时密码登录并尽快改密。`);
-        } catch (e) { 
-            alert(e.message); 
-        }
-    }
-
-    uiDeleteUser(userId) {
-        if (!this.isAdmin()) {
-            alert('权限不足，需要管理员权限');
-            return;
-        }
-        try {
-            const user = this.getUserById(userId);
-            if (confirm(`确定删除用户：${user?.username || ''}？`)) {
-                this.deleteUser(userId);
+            const response = await this.apiService.resetUserPassword(userId);
+            if (response.success) {
+                alert(`密码重置成功！临时密码：${response.data.tempPassword}`);
                 this.renderUsers();
+            } else {
+                alert('密码重置失败：' + response.message);
             }
-        } catch (e) { 
-            alert(e.message); 
+        } catch (error) {
+            console.error('重置密码失败:', error);
+            alert('密码重置失败：' + error.message);
         }
+    }
+
+    async deleteUser(userId) {
+        if (!confirm('确定要删除这个用户吗？')) return;
+
+        try {
+            const response = await this.apiService.deleteUser(userId);
+            if (response.success) {
+                alert('用户删除成功');
+                this.renderUsers();
+            } else {
+                alert('用户删除失败：' + response.message);
+            }
+        } catch (error) {
+            console.error('删除用户失败:', error);
+            alert('用户删除失败：' + error.message);
+        }
+    }
+
+    async saveUser() {
+        const form = document.getElementById('userEditForm');
+        const userId = form.dataset.userId;
+        const username = document.getElementById('editUsername').value.trim();
+        const role = document.getElementById('editRole').value;
+        const tempPassword = document.getElementById('editTempPwd').value.trim();
+
+        try {
+            let response;
+            if (userId) {
+                // 编辑用户
+                response = await this.apiService.updateUser(userId, {
+                    role,
+                    isActive: true
+                });
+            } else {
+                // 创建用户
+                response = await this.apiService.createUser({
+                    username,
+                    role,
+                    tempPassword: tempPassword || undefined
+                });
+            }
+
+            if (response.success) {
+                alert(userId ? '用户更新成功' : `用户创建成功！临时密码：${response.data.tempPassword}`);
+                this.renderUsers();
+                this.closeUserEdit();
+            } else {
+                alert('操作失败：' + response.message);
+            }
+        } catch (error) {
+            console.error('保存用户失败:', error);
+            alert('操作失败：' + error.message);
+        }
+    }
+
+    closeUserEdit() {
+        document.getElementById('userEditOverlay').style.display = 'none';
+        document.getElementById('userEditForm').reset();
+        document.getElementById('userEditForm').dataset.userId = '';
     }
 }
 
-// 全局用户管理器实例
-const userManager = new UserManager();
+// 创建全局实例
+window.userManager = new UserManager();

@@ -77,12 +77,23 @@
 - 会话超时保护（24小时）
 - 活动状态监控
 
-## 部署到GitHub Pages
+## 部署到云端
 
+### 前端部署（GitHub Pages）
 1. 将项目上传到GitHub仓库
 2. 在仓库设置中启用GitHub Pages
 3. 选择部署分支（通常是main或master）
 4. 访问 `https://yourusername.github.io/repository-name`
+
+### 后端部署（Vercel）
+1. 创建MongoDB Atlas数据库
+2. 配置环境变量
+3. 部署到Vercel
+4. 更新前端API地址
+
+详细部署指南请参考：
+- [Vercel部署指南](VERCEL_DEPLOYMENT.md)
+- [部署检查清单](DEPLOYMENT_CHECKLIST.md)
 
 ## 浏览器兼容性
 

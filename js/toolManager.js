@@ -1,57 +1,94 @@
 /** ========================
- *  工具管理模块
+ *  工具管理模块（连接后端API）
  *  ======================== */
 class ToolManager {
     constructor() {
-        this.tools = this.loadTools();
+        this.tools = [];
+        this.apiService = window.apiService;
+        this.loadTools();
     }
 
     /* ---------- 工具数据管理 ---------- */
-    loadTools() {
-        const saved = localStorage.getItem('tools');
-        if (saved) return JSON.parse(saved);
-        return [
-            { 
-                id: 1, 
-                title: '专利写作助手', 
-                description: '帮助您高效撰写专利文档，提供格式模板和内容建议。', 
-                url: 'https://bupoo123.github.io/Patent-asistant/', 
-                icon: '📝' 
-            },
-            { 
-                id: 2, 
-                title: 'PPT照片处理工具', 
-                description: '优化PPT中的图片，调整尺寸、格式和视觉效果。', 
-                url: 'https://bupoo123.github.io/ConfPic-Manager/', 
-                icon: '🖼️' 
+    async loadTools() {
+        try {
+            const response = await this.apiService.getTools();
+            if (response.success) {
+                this.tools = response.data.tools;
+                this.renderTools();
             }
-        ];
+        } catch (error) {
+            console.error('加载工具失败:', error);
+            // 如果后端不可用，使用默认工具
+            this.tools = [
+                { 
+                    _id: 1, 
+                    title: '专利写作助手', 
+                    description: '帮助您高效撰写专利文档，提供格式模板和内容建议。', 
+                    url: 'https://bupoo123.github.io/Patent-asistant/', 
+                    icon: '📝' 
+                },
+                { 
+                    _id: 2, 
+                    title: 'PPT照片处理工具', 
+                    description: '优化PPT中的图片，调整尺寸、格式和视觉效果。', 
+                    url: 'https://bupoo123.github.io/ConfPic-Manager/', 
+                    icon: '🖼️' 
+                }
+            ];
+            this.renderTools();
+        }
     }
 
     saveTools() { 
-        localStorage.setItem('tools', JSON.stringify(this.tools)); 
+        // 后端存储，无需本地保存
     }
 
-    addTool(tool) { 
-        const t = { id: genId(), ...tool }; 
-        this.tools.push(t); 
-        this.saveTools(); 
-        this.renderTools(); 
+    async addTool(tool) { 
+        try {
+            const response = await this.apiService.createTool(tool);
+            if (response.success) {
+                this.tools.push(response.data.tool);
+                this.renderTools();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('添加工具失败:', error);
+            return false;
+        }
     }
 
-    updateTool(id, data) { 
-        const i = this.tools.findIndex(t => t.id === id); 
-        if (i !== -1) { 
-            this.tools[i] = { ...this.tools[i], ...data }; 
-            this.saveTools(); 
-            this.renderTools(); 
-        } 
+    async updateTool(id, data) { 
+        try {
+            const response = await this.apiService.updateTool(id, data);
+            if (response.success) {
+                const index = this.tools.findIndex(t => t._id === id);
+                if (index !== -1) {
+                    this.tools[index] = response.data.tool;
+                    this.renderTools();
+                }
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('更新工具失败:', error);
+            return false;
+        }
     }
 
-    deleteTool(id) { 
-        this.tools = this.tools.filter(t => t.id !== id); 
-        this.saveTools(); 
-        this.renderTools(); 
+    async deleteTool(id) { 
+        try {
+            const response = await this.apiService.deleteTool(id);
+            if (response.success) {
+                this.tools = this.tools.filter(t => t._id !== id);
+                this.renderTools();
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('删除工具失败:', error);
+            return false;
+        }
     }
 
     /* ---------- 工具界面渲染 ---------- */
