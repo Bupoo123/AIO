@@ -4,7 +4,7 @@
 
 class ApiService {
     constructor() {
-        this.baseURL = 'https://backend-h7zt70zb7-bupoos-projects.vercel.app/api';
+        this.baseURL = 'https://backend-4keycj5me-bupoos-projects.vercel.app/api';
         this.token = localStorage.getItem('authToken');
     }
 
