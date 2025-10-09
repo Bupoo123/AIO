@@ -13,8 +13,9 @@ const toolRoutes = require('./routes/tools');
 // 简化的登录逻辑（临时解决方案）
 const simpleLogin = (req, res) => {
   const { username, password } = req.body;
+  const currentPassword = process.env.ADMIN_PASSWORD || 'admin123';
   
-  if (username === 'admin' && password === 'admin123') {
+  if (username === 'admin' && password === currentPassword) {
     const token = require('jsonwebtoken').sign(
       { userId: 'admin' }, 
       process.env.JWT_SECRET || 'fallback-secret', 
@@ -40,6 +41,36 @@ const simpleLogin = (req, res) => {
       message: '用户名或密码错误'
     });
   }
+};
+
+// 修改密码接口
+const changePassword = (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const storedPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  
+  // 验证当前密码
+  if (currentPassword !== storedPassword) {
+    return res.status(400).json({
+      success: false,
+      message: '当前密码错误'
+    });
+  }
+  
+  // 验证新密码
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: '新密码长度至少6位'
+    });
+  }
+  
+  // 注意：这里只是演示，实际部署时需要更新环境变量
+  // 在Vercel中，需要通过Dashboard或CLI更新环境变量
+  res.json({
+    success: true,
+    message: '密码修改成功！请通过Vercel Dashboard更新ADMIN_PASSWORD环境变量',
+    note: '当前密码仍为: ' + storedPassword
+  });
 };
 
 const app = express();
@@ -82,6 +113,7 @@ app.get('/health', (req, res) => {
 
 // API路由 - 使用简化的登录
 app.post('/api/auth/login', simpleLogin);
+app.post('/api/auth/change-password', changePassword);
 app.use('/api/auth', authRoutes);
 app.use('/api/tools', toolRoutes);
 

@@ -73,8 +73,8 @@ class ApiService {
     }
 
     async changePassword(passwordData) {
-        return this.request('/auth/password', {
-            method: 'PUT',
+        return this.request('/auth/change-password', {
+            method: 'POST',
             body: JSON.stringify(passwordData)
         });
     }

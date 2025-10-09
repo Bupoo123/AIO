@@ -125,6 +125,9 @@ class App {
         // 用户管理
         this.setupUserEventListeners();
         
+        // 修改密码
+        this.setupChangePasswordEventListeners();
+        
         // 首次登录改密
         this.setupFirstLoginEventListeners();
     }
@@ -226,6 +229,57 @@ class App {
                 document.getElementById('userEditOverlay').style.display = 'none';
             } catch (err) {
                 alert(err.message || '创建用户失败');
+            }
+        });
+    }
+
+    setupChangePasswordEventListeners() {
+        // 修改密码按钮
+        document.getElementById('changePasswordBtn').addEventListener('click', () => {
+            if (!userManager.isAdmin()) {
+                alert('权限不足，需要管理员权限');
+                return;
+            }
+            document.getElementById('changePasswordForm').reset();
+            document.getElementById('changePasswordOverlay').style.display = 'flex';
+        });
+
+        // 取消修改密码
+        document.getElementById('cancelChangePasswordBtn').addEventListener('click', () => {
+            document.getElementById('changePasswordOverlay').style.display = 'none';
+        });
+
+        // 修改密码表单
+        document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmNewPassword').value;
+            
+            if (newPassword.length < 6) {
+                alert('新密码长度至少6位');
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                alert('两次输入的新密码不一致');
+                return;
+            }
+            
+            try {
+                const response = await apiService.changePassword({
+                    currentPassword,
+                    newPassword
+                });
+                
+                if (response.success) {
+                    alert('密码修改成功！\n\n注意：由于当前使用环境变量存储密码，您需要：\n1. 登录Vercel Dashboard\n2. 进入项目设置\n3. 更新ADMIN_PASSWORD环境变量为: ' + newPassword);
+                    document.getElementById('changePasswordOverlay').style.display = 'none';
+                    this.addUpdateLog('管理员修改了密码');
+                } else {
+                    alert(response.message || '密码修改失败');
+                }
+            } catch (error) {
+                alert(error.message || '密码修改失败');
             }
         });
     }
