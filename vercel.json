@@ -1,24 +1,9 @@
 {
   "version": 2,
-  "name": "html-tools-frontend",
-  "builds": [
+  "rewrites": [
     {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/styles/(.*)",
-      "dest": "/styles/$1"
-    },
-    {
-      "src": "/js/(.*)",
-      "dest": "/js/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/((?!styles|js|favicon.ico).*)",
+      "destination": "/index.html"
     }
   ]
 }
