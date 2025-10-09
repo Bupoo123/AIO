@@ -20,8 +20,10 @@ app.use(helmet());
 
 // CORS配置
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: process.env.FRONTEND_URL || 'https://html-tools-frontend.vercel.app',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // 请求限制
