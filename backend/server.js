@@ -10,67 +10,177 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const toolRoutes = require('./routes/tools');
 
-// 简化的登录逻辑（临时解决方案）
-const simpleLogin = (req, res) => {
+// 智能登录逻辑（数据库优先，环境变量备用）
+const smartLogin = async (req, res) => {
   const { username, password } = req.body;
-  const currentPassword = process.env.ADMIN_PASSWORD || 'admin123';
   
-  if (username === 'admin' && password === currentPassword) {
-    const token = require('jsonwebtoken').sign(
-      { userId: 'admin' }, 
-      process.env.JWT_SECRET || 'fallback-secret', 
-      { expiresIn: '7d' }
-    );
+  try {
+    // 首先尝试从数据库查找用户
+    const User = require('./models/User');
+    const user = await User.findOne({ username, isActive: true });
     
-    res.json({
-      success: true,
-      message: '登录成功',
-      data: {
-        user: {
-          _id: 'admin',
-          username: 'admin',
-          role: 'admin'
-        },
-        token,
-        mustReset: false
+    if (user) {
+      // 数据库用户存在，验证密码
+      const isValidPassword = await user.comparePassword(password);
+      if (isValidPassword) {
+        // 更新最后登录时间
+        await user.updateLastLogin();
+        
+        const token = require('jsonwebtoken').sign(
+          { userId: user._id }, 
+          process.env.JWT_SECRET || 'fallback-secret', 
+          { expiresIn: '7d' }
+        );
+        
+        return res.json({
+          success: true,
+          message: '登录成功',
+          data: {
+            user: {
+              _id: user._id,
+              username: user.username,
+              role: user.role
+            },
+            token,
+            mustReset: user.mustReset
+          }
+        });
       }
-    });
-  } else {
+    }
+    
+    // 如果数据库中没有用户，或者密码错误，尝试环境变量备用方案
+    if (username === 'admin') {
+      const envPassword = process.env.ADMIN_PASSWORD || 'admin123';
+      if (password === envPassword) {
+        // 创建或更新数据库中的admin用户
+        const User = require('./models/User');
+        let adminUser = await User.findOne({ username: 'admin' });
+        
+        if (!adminUser) {
+          // 创建新的admin用户
+          const bcrypt = require('bcryptjs');
+          const salt = await bcrypt.genSalt(10);
+          const passwordHash = await bcrypt.hash(password, salt);
+          
+          adminUser = new User({
+            username: 'admin',
+            role: 'admin',
+            passwordHash,
+            mustReset: false,
+            isActive: true
+          });
+          await adminUser.save();
+        }
+        
+        const token = require('jsonwebtoken').sign(
+          { userId: adminUser._id }, 
+          process.env.JWT_SECRET || 'fallback-secret', 
+          { expiresIn: '7d' }
+        );
+        
+        return res.json({
+          success: true,
+          message: '登录成功',
+          data: {
+            user: {
+              _id: adminUser._id,
+              username: adminUser.username,
+              role: adminUser.role
+            },
+            token,
+            mustReset: adminUser.mustReset
+          }
+        });
+      }
+    }
+    
+    // 所有验证都失败
     res.status(401).json({
       success: false,
       message: '用户名或密码错误'
     });
+    
+  } catch (error) {
+    console.error('登录错误:', error);
+    res.status(500).json({
+      success: false,
+      message: '登录服务暂时不可用，请稍后重试'
+    });
   }
 };
 
-// 修改密码接口
-const changePassword = (req, res) => {
+// 修改密码接口（基于数据库）
+const changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  const storedPassword = process.env.ADMIN_PASSWORD || 'admin123';
   
-  // 验证当前密码
-  if (currentPassword !== storedPassword) {
-    return res.status(400).json({
+  try {
+    // 验证新密码格式
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: '新密码长度至少6位'
+      });
+    }
+    
+    // 从JWT token中获取用户ID
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: '未提供认证令牌'
+      });
+    }
+    
+    // 验证token并获取用户信息
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    const userId = decoded.userId;
+    
+    // 查找用户
+    const User = require('./models/User');
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+    
+    // 验证当前密码
+    const isValidPassword = await user.comparePassword(currentPassword);
+    if (!isValidPassword) {
+      return res.status(400).json({
+        success: false,
+        message: '当前密码错误'
+      });
+    }
+    
+    // 更新密码
+    const bcrypt = require('bcryptjs');
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+    
+    user.passwordHash = passwordHash;
+    user.mustReset = false; // 清除强制重置标志
+    user.updatedAt = new Date();
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: '密码修改成功！',
+      data: {
+        userId: user._id,
+        username: user.username
+      }
+    });
+    
+  } catch (error) {
+    console.error('修改密码错误:', error);
+    res.status(500).json({
       success: false,
-      message: '当前密码错误'
+      message: '密码修改失败，请稍后重试'
     });
   }
-  
-  // 验证新密码
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: '新密码长度至少6位'
-    });
-  }
-  
-  // 注意：这里只是演示，实际部署时需要更新环境变量
-  // 在Vercel中，需要通过Dashboard或CLI更新环境变量
-  res.json({
-    success: true,
-    message: '密码修改成功！请通过Vercel Dashboard更新ADMIN_PASSWORD环境变量',
-    note: '当前密码仍为: ' + storedPassword
-  });
 };
 
 const app = express();
@@ -111,8 +221,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API路由 - 使用简化的登录
-app.post('/api/auth/login', simpleLogin);
+// API路由 - 使用智能登录
+app.post('/api/auth/login', smartLogin);
 app.post('/api/auth/change-password', changePassword);
 app.use('/api/auth', authRoutes);
 app.use('/api/tools', toolRoutes);

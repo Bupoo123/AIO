@@ -272,7 +272,7 @@ class App {
                 });
                 
                 if (response.success) {
-                    alert('密码修改成功！\n\n注意：由于当前使用环境变量存储密码，您需要：\n1. 登录Vercel Dashboard\n2. 进入项目设置\n3. 更新ADMIN_PASSWORD环境变量为: ' + newPassword);
+                    alert('密码修改成功！\n\n新密码已保存到数据库中，无需手动更新环境变量。');
                     document.getElementById('changePasswordOverlay').style.display = 'none';
                     this.addUpdateLog('管理员修改了密码');
                 } else {
