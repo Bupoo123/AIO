@@ -15,6 +15,30 @@ const getTools = async (req, res) => {
     });
   } catch (error) {
     console.error('获取工具列表错误:', error);
+    
+    // 如果数据库连接失败，返回默认工具列表
+    if (error.name === 'MongoNotConnectedError' || error.message.includes('buffering timed out')) {
+      console.log('数据库连接失败，返回默认工具列表');
+      return res.json({
+        success: true,
+        data: {
+          tools: [
+            {
+              _id: 'default-1',
+              title: 'HTML工具集',
+              description: '一站式HTML工具平台',
+              url: '#',
+              icon: '🔧',
+              isActive: true,
+              createdBy: { username: 'admin' },
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+          ]
+        }
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: '服务器内部错误'
