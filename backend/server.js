@@ -288,7 +288,9 @@ const limiter = rateLimit({
   message: {
     success: false,
     message: '请求过于频繁，请稍后再试'
-  }
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
